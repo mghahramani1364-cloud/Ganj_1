@@ -24,19 +24,19 @@ jobs:
 
     - name: Build WebView APK
       run: |
-        # ساختار یک اپلیکیشن ساده اندروید برای نمایش وب‌سایت
+        # ساخت پوشه‌های مورد نیاز یک پروژه اندروید
         mkdir -p ./app/src/main/assets/www
         mkdir -p ./app/src/main/java/com/example/webapp
         mkdir -p ./app/src/main/res/values
         
-        # کپی کردن فایل‌های وب به داخل اپلیکیشن
+        # کپی کردن تمام فایل‌های استخراج شده از زیپ شما به داخل اپلیکیشن
         cp -r ./web_project/* ./app/src/main/assets/www/
         
-        # ساخت فایل‌های اصلی اندروید
+        # 1. فایل تنظیمات اصلی اپلیکیشن
         cat > ./app/src/main/AndroidManifest.xml << 'EOF'
         <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.webapp">
             <uses-permission android:name="android.permission.INTERNET" />
-            <application android:label="Ganjine" android:theme="@style/AppTheme">
+            <application android:label="Ganjine" android:theme="@style/AppTheme" android:usesCleartextTraffic="true">
                 <activity android:name=".MainActivity" android:exported="true">
                     <intent-filter>
                         <action android:name="android.intent.action.MAIN" />
@@ -47,12 +47,14 @@ jobs:
         </manifest>
         EOF
 
+        # 2. کد جاوا برای اجرای WebView
         cat > ./app/src/main/java/com/example/webapp/MainActivity.java << 'EOF'
         package com.example.webapp;
         import android.app.Activity;
         import android.os.Bundle;
         import android.webkit.WebView;
         import android.webkit.WebSettings;
+        import android.webkit.WebViewClient;
         public class MainActivity extends Activity {
             @Override
             protected void onCreate(Bundle savedInstanceState) {
@@ -62,18 +64,22 @@ jobs:
                 webSettings.setJavaScriptEnabled(true);
                 webSettings.setDomStorageEnabled(true);
                 webSettings.setAllowFileAccess(true);
+                webSettings.setAllowContentAccess(true);
+                webView.setWebViewClient(new WebViewClient());
                 webView.loadUrl("file:///android_asset/www/index.html");
                 setContentView(webView);
             }
         }
         EOF
 
+        # 3. استایل اپلیکیشن (بدون نوار عنوان)
         cat > ./app/src/main/res/values/styles.xml << 'EOF'
         <resources>
             <style name="AppTheme" parent="android:Theme.NoTitleBar" />
         </resources>
         EOF
 
+        # 4. فایل‌های تنظیمات Gradle
         cat > ./app/build.gradle << 'EOF'
         plugins { id 'com.android.application' }
         android {
@@ -85,6 +91,9 @@ jobs:
                 targetSdk 34
                 versionCode 1
                 versionName "1.0"
+            }
+            buildTypes {
+                release { minifyEnabled false }
             }
         }
         EOF
@@ -102,7 +111,7 @@ jobs:
         include ':app'
         EOF
 
-        # اجرای Gradle برای ساخت فایل نهایی
+        # 5. ساخت APK
         gradle wrapper --gradle-version 8.7
         chmod +x gradlew
         ./gradlew assembleDebug
