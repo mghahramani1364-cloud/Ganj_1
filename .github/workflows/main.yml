@@ -1,4 +1,4 @@
-name: Build Web APK
+name: Build APK from ZIP
 
 on:
   push:
@@ -22,17 +22,96 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Build APK using WebView Template
-      uses: tsobis/android-webview-app@v1
-      with:
-        app-name: "Ganjine Danayi"
-        package-name: "com.ganjine.danayi"
-        web-dir: "./web_project"
-        # اینجا نام فایل اصلی وب‌سایت شماست. اگر اسمش چیز دیگری است، تغییرش دهید
-        start-page: "index.html" 
+    - name: Build WebView APK
+      run: |
+        # ساخت پوشه‌های اندروید
+        mkdir -p ./app/src/main/assets/www
+        mkdir -p ./app/src/main/java/com/example/webapp
+        mkdir -p ./app/src/main/res/values
         
+        # کپی کردن فایل‌های شما به داخل اپلیکیشن
+        cp -r ./web_project/* ./app/src/main/assets/www/
+        
+        # ساخت فایل‌های اصلی اندروید
+        cat > ./app/src/main/AndroidManifest.xml << 'EOF'
+        <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.webapp">
+            <uses-permission android:name="android.permission.INTERNET" />
+            <application android:label="Ganjine" android:theme="@style/AppTheme" android:usesCleartextTraffic="true">
+                <activity android:name=".MainActivity" android:exported="true">
+                    <intent-filter>
+                        <action android:name="android.intent.action.MAIN" />
+                        <category android:name="android.intent.category.LAUNCHER" />
+                    </intent-filter>
+                </activity>
+            </application>
+        </manifest>
+        EOF
+
+        cat > ./app/src/main/java/com/example/webapp/MainActivity.java << 'EOF'
+        package com.example.webapp;
+        import android.app.Activity;
+        import android.os.Bundle;
+        import android.webkit.WebView;
+        import android.webkit.WebSettings;
+        import android.webkit.WebViewClient;
+        public class MainActivity extends Activity {
+            @Override
+            protected void onCreate(Bundle savedInstanceState) {
+                super.onCreate(savedInstanceState);
+                WebView webView = new WebView(this);
+                WebSettings webSettings = webView.getSettings();
+                webSettings.setJavaScriptEnabled(true);
+                webSettings.setDomStorageEnabled(true);
+                webSettings.setAllowFileAccess(true);
+                webSettings.setAllowContentAccess(true);
+                webView.setWebViewClient(new WebViewClient());
+                webView.loadUrl("file:///android_asset/www/index.html");
+                setContentView(webView);
+            }
+        }
+        EOF
+
+        cat > ./app/src/main/res/values/styles.xml << 'EOF'
+        <resources>
+            <style name="AppTheme" parent="android:Theme.NoTitleBar" />
+        </resources>
+        EOF
+
+        cat > ./app/build.gradle << 'EOF'
+        plugins { id 'com.android.application' }
+        android {
+            namespace 'com.example.webapp'
+            compileSdk 34
+            defaultConfig {
+                applicationId "com.example.webapp"
+                minSdk 21
+                targetSdk 34
+                versionCode 1
+                versionName "1.0"
+            }
+        }
+        EOF
+
+        cat > ./build.gradle << 'EOF'
+        buildscript {
+            repositories { google(); mavenCentral() }
+            dependencies { classpath 'com.android.tools.build:gradle:8.1.0' }
+        }
+        allprojects { repositories { google(); mavenCentral() } }
+        EOF
+
+        cat > ./settings.gradle << 'EOF'
+        rootProject.name = "WebApp"
+        include ':app'
+        EOF
+
+        # ساخت APK
+        gradle wrapper --gradle-version 8.7
+        chmod +x gradlew
+        ./gradlew assembleDebug
+
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
-        path: ${{ steps.build.outputs.apk-path }}
+        path: app/build/outputs/apk/debug/*.apk
