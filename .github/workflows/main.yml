@@ -1,4 +1,4 @@
-name: Build Web APK
+name: Build Game APK
 
 on:
   push:
@@ -9,24 +9,106 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      - name: Unzip Project
-        run: |
-          unzip "GanjineDanayi_MohammadAli_FINAL_REDESIGNED_UNDER_25MB.zip" -d ./www
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
 
-      - name: Build APK
-        uses: samuelcustos/web-to-apk-action@v1
-        with:
-          app-name: "Ganjine Danayi"
-          package-name: "com.ganjine.danayi"
-          version-name: "1.0.0"
-          version-code: "1"
-          website-url: "file:///android_asset/www/index.html"
+    - name: Create WebView App
+      run: |
+        mkdir -p ./my_app/app/src/main/java/com/game/app
+        mkdir -p ./my_app/app/src/main/res/values
+        mkdir -p ./my_app/app/src/main/assets
+        
+        # کپی کردن کل پوشه game از زیپ شما به داخل اپلیکیشن
+        unzip -q "GanjineDanayi_MohammadAli_FINAL_REDESIGNED_UNDER_25MB.zip" -d ./temp_extract
+        cp -r ./temp_extract/app/src/main/assets/game ./my_app/app/src/main/assets/
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release
-          path: app-release.apk
+        cat > ./my_app/app/src/main/AndroidManifest.xml << 'EOF'
+        <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.game.app">
+            <uses-permission android:name="android.permission.INTERNET" />
+            <application android:label="Ganjine Danayi" android:theme="@style/AppTheme" android:usesCleartextTraffic="true" android:hardwareAccelerated="true">
+                <activity android:name=".MainActivity" android:exported="true">
+                    <intent-filter>
+                        <action android:name="android.intent.action.MAIN" />
+                        <category android:name="android.intent.category.LAUNCHER" />
+                    </intent-filter>
+                </activity>
+            </application>
+        </manifest>
+        EOF
+
+        cat > ./my_app/app/src/main/java/com/game/app/MainActivity.java << 'EOF'
+        package com.game.app;
+        import android.app.Activity;
+        import android.os.Bundle;
+        import android.webkit.WebView;
+        import android.webkit.WebSettings;
+        import android.webkit.WebViewClient;
+        public class MainActivity extends Activity {
+            @Override
+            protected void onCreate(Bundle savedInstanceState) {
+                super.onCreate(savedInstanceState);
+                WebView webView = new WebView(this);
+                WebSettings webSettings = webView.getSettings();
+                webSettings.setJavaScriptEnabled(true);
+                webSettings.setDomStorageEnabled(true);
+                webSettings.setAllowFileAccess(true);
+                webSettings.setAllowContentAccess(true);
+                webSettings.setAllowFileAccessFromFileURLs(true);
+                webSettings.setAllowUniversalAccessFromFileURLs(true);
+                webView.setWebViewClient(new WebViewClient());
+                webView.loadUrl("file:///android_asset/game/index.html");
+                setContentView(webView);
+            }
+        }
+        EOF
+
+        cat > ./my_app/app/src/main/res/values/styles.xml << 'EOF'
+        <resources>
+            <style name="AppTheme" parent="android:Theme.NoTitleBar.Fullscreen" />
+        </resources>
+        EOF
+
+        cat > ./my_app/app/build.gradle << 'EOF'
+        plugins { id 'com.android.application' }
+        android {
+            namespace 'com.game.app'
+            compileSdk 34
+            defaultConfig {
+                applicationId "com.game.app"
+                minSdk 21
+                targetSdk 34
+                versionCode 1
+                versionName "1.0"
+            }
+        }
+        EOF
+
+        cat > ./my_app/build.gradle << 'EOF'
+        buildscript {
+            repositories { google(); mavenCentral() }
+            dependencies { classpath 'com.android.tools.build:gradle:8.1.0' }
+        }
+        allprojects { repositories { google(); mavenCentral() } }
+        EOF
+
+        cat > ./my_app/settings.gradle << 'EOF'
+        rootProject.name = "GameApp"
+        include ':app'
+        EOF
+
+        cd ./my_app
+        gradle wrapper --gradle-version 8.7
+        chmod +x gradlew
+        ./gradlew assembleDebug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: game-apk
+        path: my_app/app/build/outputs/apk/debug/*.apk
